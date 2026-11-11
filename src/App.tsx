@@ -2,26 +2,23 @@ import { useMemo, useState } from "react";
 import "./App.css";
 
 type ClassSlot = {
-  day: number; // Sunday = 0, Tuesday = 2, Thursday = 4
+  day: number;
   start: string;
   end: string;
   code: string;
   title: string;
-  lecturer?: string;
 };
 
 type Room = {
   name: string;
   category: string;
   capacity: number;
-  image: string;
   features: string[];
   timetable: ClassSlot[];
-  hasTimetableSample: boolean;
   librarySeats?: { total: number; occupied: number };
 };
 
-const names = [
+const roomNames = [
   "Auditorium 1 @ Level 7",
   "Auditorium 2 @ Level 6",
   "Auditorium 3 @ Block C Level 9",
@@ -59,21 +56,30 @@ const names = [
   "Tech Lab 4-01",
   "Tech Lab 4-02",
   "Tech Lab 4-03",
+  "Tech Lab 4-07",
   "Tech Lab 5-01 Financial Trading Centre",
   "Tech Lab 5-02 Cisco Lab",
+  "Tech Lab 6-01",
+  "Tech Lab 6-02",
+  "Tech Lab 6-03",
+  "Tech Lab 6-04",
+  "Tech Lab 6-05",
+  "Tech Lab 6-06",
+  "Tech Lab 6-07",
+  "Tech Lab 6-08",
+  "Tech Lab 6-09",
   "Tech Lab 6-10 (ID Suite)",
+  "Tech Lab 6-11",
   "Tech Lab 6-12 (Pixels Suite)",
+  "Tech Lab 6-13",
+  "Tech Lab 6-14",
   "Tech Lab 6-15 (CGI Suite)",
   "Tech Lab 6-16 (iMac Suite)",
   "Tech Lab 6-17 (Animation Suite)",
   "Tech Lab 6-18 (VFX Suite)",
   "Tech Lab 6-19 (Greenscreen)",
-];
-
-const images = [
-  "https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=1200&q=85",
-  "https://images.unsplash.com/photo-1497366811353-6870744d04b2?auto=format&fit=crop&w=1200&q=85",
-  "https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=1200&q=85",
+  "Tech Lab 7-01",
+  "Tech Lab 7-02",
 ];
 
 const facilityOptions = [
@@ -84,77 +90,132 @@ const facilityOptions = [
   "Quiet study",
 ];
 
-const featureSamples = [
+const facilityPatterns = [
   ["Whiteboard", "Projector", "Power outlets"],
   ["Whiteboard", "Power outlets"],
   ["Projector", "Video conferencing"],
   ["Power outlets", "Quiet study"],
   ["Whiteboard", "Video conferencing"],
+  ["Projector", "Power outlets", "Quiet study"],
+];
+
+const classBlocks = [
+  { start: "08:30", end: "10:30" },
+  { start: "10:30", end: "12:30" },
+  { start: "13:00", end: "15:00" },
+  { start: "15:00", end: "17:00" },
+];
+
+const demoSubjects = [
+  "Sample lecture",
+  "Sample tutorial",
+  "Project workshop",
+  "Group study booking",
+  "Sample laboratory class",
 ];
 
 function getCategory(name: string) {
-  const n = name.toLowerCase();
-  if (n.includes("library open")) return "Library · Open study";
-  if (n.includes("computer zone")) return "Library · Computer area";
-  if (n.includes("discussion room")) return "Library · Discussion room";
-  if (n.includes("auditorium") || n.includes("theatre")) return "Auditorium";
-  if (n.includes("tech lab")) return "Technology lab";
-  if (n.includes("presentation room")) return "Meeting room";
-  if (n.includes("studio")) return "Studio";
-  if (n.includes("workshop")) return "Workshop";
-  if (n.includes("lab")) return "Laboratory";
+  const lower = name.toLowerCase();
+
+  if (lower.includes("library open")) return "Library · Open study";
+  if (lower.includes("computer zone")) return "Library · Computer area";
+  if (lower.includes("discussion room")) return "Library · Discussion room";
+  if (lower.includes("auditorium") || lower.includes("theatre")) return "Auditorium";
+  if (lower.includes("tech lab")) return "Technology lab";
+  if (lower.includes("presentation room")) return "Meeting room";
+  if (lower.includes("studio")) return "Studio";
+  if (lower.includes("workshop")) return "Workshop";
+  if (lower.includes("lab")) return "Laboratory";
   return "Campus space";
 }
 
-const rooms: Room[] = names.map((name, index) => {
-  const isLibraryOpen = name === "Library Open Study Area";
+function makeTimetable(roomName: string, roomIndex: number): ClassSlot[] {
+  // This Tuesday class is copied from your screenshot.
+  if (roomName === "B-04-01") {
+    return [
+      {
+        day: 2,
+        start: "08:30",
+        end: "10:30",
+        code: "CT044-3-1-IOOP-L-10",
+        title: "Introduction to Object Oriented Programming",
+      },
+      {
+        day: 4,
+        start: "13:00",
+        end: "15:00",
+        code: "DEMO",
+        title: "Sample scheduled class",
+      },
+    ];
+  }
+
+  const slots: ClassSlot[] = [];
+
+  // The generated sample schedules use weekdays only.
+  for (const day of [1, 2, 3, 4, 5]) {
+    if ((roomIndex + day) % 5 === 0) continue;
+
+    const firstBlock = (roomIndex + day * 2) % classBlocks.length;
+    const blocksForDay = [firstBlock];
+
+    if ((roomIndex + day) % 3 === 0) {
+      blocksForDay.push((firstBlock + 2) % classBlocks.length);
+    }
+
+    for (const blockIndex of blocksForDay) {
+      const block = classBlocks[blockIndex];
+      slots.push({
+        day,
+        start: block.start,
+        end: block.end,
+        code: `DEMO-${String(roomIndex + 1).padStart(2, "0")}`,
+        title: demoSubjects[(roomIndex + day + blockIndex) % demoSubjects.length],
+      });
+    }
+  }
+
+  return slots;
+}
+
+const rooms: Room[] = roomNames.map((name, index) => {
+  const category = getCategory(name);
+  const isAuditorium = category === "Auditorium";
+  const isLibraryStudy = name === "Library Open Study Area";
   const isLibraryComputer = name === "Library Computer Zone";
-  const hasTimetableSample = name === "B-04-01";
+  const isDiscussionRoom = category === "Library · Discussion room";
+
+  let capacity = 12;
+  if (isAuditorium) capacity = 120;
+  else if (isLibraryStudy) capacity = 60;
+  else if (isLibraryComputer) capacity = 24;
+  else if (isDiscussionRoom) capacity = 6;
+  else if (category === "Technology lab") capacity = 30;
+  else if (category === "Laboratory") capacity = 24;
+  else if (category === "Studio" || category === "Workshop") capacity = 20;
 
   return {
     name,
-    category: getCategory(name),
-    capacity: isLibraryOpen ? 60 : isLibraryComputer ? 24 : [80, 60, 40, 12, 10, 8, 6][index % 7],
-    image: images[index % images.length],
-    features: isLibraryOpen
-      ? ["Power outlets", "Quiet study"]
-      : isLibraryComputer
-        ? ["Power outlets"]
-        : featureSamples[index % featureSamples.length],
-    librarySeats: isLibraryOpen
+    category,
+    capacity,
+    features: facilityPatterns[index % facilityPatterns.length],
+    timetable: makeTimetable(name, index),
+    librarySeats: isLibraryStudy
       ? { total: 60, occupied: 38 }
       : isLibraryComputer
         ? { total: 24, occupied: 17 }
         : undefined,
-    hasTimetableSample,
-    timetable: hasTimetableSample
-      ? [
-          {
-            day: 2,
-            start: "08:30",
-            end: "10:30",
-            code: "CT044-3-1-IOOP-L-10",
-            title: "Introduction to Object Oriented Programming",
-            lecturer: "Dr. Hong Siaw Swin",
-          },
-          {
-            day: 4,
-            start: "13:00",
-            end: "15:00",
-            code: "DEMO",
-            title: "Scheduled class · sample timetable entry",
-          },
-        ]
-      : [],
   };
 });
 
-const weekDays = [
+const weekdays = [
   { day: 1, name: "Monday" },
   { day: 2, name: "Tuesday" },
   { day: 3, name: "Wednesday" },
   { day: 4, name: "Thursday" },
   { day: 5, name: "Friday" },
+  { day: 6, name: "Saturday" },
+  { day: 0, name: "Sunday" },
 ];
 
 function localDate(date: Date) {
@@ -163,25 +224,21 @@ function localDate(date: Date) {
   return copy.toISOString().slice(0, 10);
 }
 
-function getToday() {
-  return localDate(new Date());
-}
-
 function toMinutes(time: string) {
   const [hours, minutes] = time.split(":").map(Number);
   return hours * 60 + minutes;
 }
 
 function fromMinutes(minutes: number) {
-  const hours = Math.floor(minutes / 60);
-  const mins = minutes % 60;
+  const normalized = ((minutes % 1440) + 1440) % 1440;
+  const hours = Math.floor(normalized / 60);
+  const mins = normalized % 60;
   return `${String(hours).padStart(2, "0")}:${String(mins).padStart(2, "0")}`;
 }
 
 function mondayOf(dateString: string) {
   const date = new Date(`${dateString}T12:00:00`);
-  const offset = (date.getDay() + 6) % 7;
-  date.setDate(date.getDate() - offset);
+  date.setDate(date.getDate() - ((date.getDay() + 6) % 7));
   return localDate(date);
 }
 
@@ -198,6 +255,10 @@ function prettyDate(dateString: string) {
   });
 }
 
+function getToday() {
+  return localDate(new Date());
+}
+
 function App() {
   const today = getToday();
   const [date, setDate] = useState(today);
@@ -208,31 +269,58 @@ function App() {
   const [selectedRoom, setSelectedRoom] = useState<Room | null>(null);
   const [weekStart, setWeekStart] = useState(mondayOf(today));
 
-  const endTime = fromMinutes(toMinutes(startTime) + durationMinutes);
-  const selectedDay = new Date(`${date}T12:00:00`).getDay();
+  const selectedWeekday = new Date(`${date}T12:00:00`).getDay();
+  const absoluteStart = toMinutes(startTime);
+  const absoluteEnd = absoluteStart + durationMinutes;
+
+  const endTimeText =
+    absoluteEnd >= 1440
+      ? `${fromMinutes(absoluteEnd)} (+1 day)`
+      : fromMinutes(absoluteEnd);
 
   const availableRooms = useMemo(() => {
-    const requestedStart = toMinutes(startTime);
-    const requestedEnd = requestedStart + durationMinutes;
-
     return rooms.filter((room) => {
       const capacityMatches = room.capacity >= capacity;
       const facilitiesMatch = selectedFacilities.every((facility) =>
         room.features.includes(facility),
       );
 
-      const hasNoClassConflict = room.timetable
-        .filter((slot) => slot.day === selectedDay)
-        .every((slot) => {
+      let hasClassConflict = false;
+
+      // Check every calendar day touched by the requested time interval.
+      const lastOffset = Math.floor((absoluteEnd - 1) / 1440);
+
+      for (let offset = 0; offset <= lastOffset; offset++) {
+        const weekday = (selectedWeekday + offset) % 7;
+
+        // No classes are scheduled on Saturday or Sunday in this demo.
+        if (weekday === 0 || weekday === 6) continue;
+
+        const intervalStart = Math.max(absoluteStart, offset * 1440) - offset * 1440;
+        const intervalEnd = Math.min(absoluteEnd, (offset + 1) * 1440) - offset * 1440;
+
+        hasClassConflict = room.timetable.some((slot) => {
+          if (slot.day !== weekday) return false;
+
           const overlaps =
-            requestedStart < toMinutes(slot.end) &&
-            requestedEnd > toMinutes(slot.start);
-          return !overlaps;
+            intervalStart < toMinutes(slot.end) &&
+            intervalEnd > toMinutes(slot.start);
+
+          return overlaps;
         });
 
-      return capacityMatches && facilitiesMatch && hasNoClassConflict;
+        if (hasClassConflict) break;
+      }
+
+      return capacityMatches && facilitiesMatch && !hasClassConflict;
     });
-  }, [capacity, durationMinutes, selectedDay, selectedFacilities, startTime]);
+  }, [
+    absoluteEnd,
+    absoluteStart,
+    capacity,
+    selectedFacilities,
+    selectedWeekday,
+  ]);
 
   function toggleFacility(facility: string) {
     setSelectedFacilities((current) =>
@@ -248,7 +336,9 @@ function App() {
   }
 
   function timelineFor(room: Room, day: number) {
-    if (!room.hasTimetableSample) return [];
+    if (day === 0 || day === 6) {
+      return [{ start: "00:00", end: "24:00", title: "Free · no demo classes", free: true }];
+    }
 
     const slots = room.timetable
       .filter((slot) => slot.day === day)
@@ -259,8 +349,7 @@ function App() {
       end: string;
       title: string;
       code?: string;
-      kind: "free" | "class";
-      lecturer?: string;
+      free: boolean;
     }> = [];
 
     let cursor = 8 * 60;
@@ -274,7 +363,7 @@ function App() {
           start: fromMinutes(cursor),
           end: fromMinutes(classStart),
           title: "Free",
-          kind: "free",
+          free: true,
         });
       }
 
@@ -283,8 +372,7 @@ function App() {
         end: slot.end,
         title: slot.title,
         code: slot.code,
-        lecturer: slot.lecturer,
-        kind: "class",
+        free: false,
       });
 
       cursor = Math.max(cursor, classEnd);
@@ -295,7 +383,7 @@ function App() {
         start: fromMinutes(cursor),
         end: "18:00",
         title: "Free",
-        kind: "free",
+        free: true,
       });
     }
 
@@ -311,26 +399,18 @@ function App() {
           <span className="brand-mark">S</span>
           <span>SpaceLens</span>
         </a>
-        <nav className="nav-links" aria-label="Main navigation">
+        <nav className="nav-links">
           <a className="active" href="#spaces">Find a space</a>
         </nav>
         <span className="campus-label">APU campus</span>
       </header>
 
       <section className="hero">
-        <div className="hero-copy-block">
-          <p className="eyebrow">A little more room to think</p>
-          <h1>Your space.<br /><span>Found.</span></h1>
-          <p className="hero-copy">
-            Find a place to focus, meet, and make something great.
-          </p>
-        </div>
-        <div className="hero-orbit" aria-hidden="true">
-          <span className="orbit orbit-one" />
-          <span className="orbit orbit-two" />
-          <span className="orbit-dot" />
-          <span className="orbit-label">space<br />to think</span>
-        </div>
+        <p className="eyebrow">A little more room to think</p>
+        <h1>Your space.<br /><span>Found.</span></h1>
+        <p className="hero-copy">
+          Find a place to focus, meet, and make something great.
+        </p>
       </section>
 
       <section className="search-panel" aria-label="Room search filters">
@@ -351,8 +431,6 @@ function App() {
             <input
               id="start-time"
               type="time"
-              min="07:00"
-              max="20:00"
               value={startTime}
               onChange={(event) => setStartTime(event.target.value)}
             />
@@ -390,6 +468,8 @@ function App() {
               <option value={6}>6+ people</option>
               <option value={10}>10+ people</option>
               <option value={20}>20+ people</option>
+              <option value={50}>50+ people</option>
+              <option value={100}>100+ people</option>
             </select>
           </div>
 
@@ -426,12 +506,12 @@ function App() {
           </div>
           <p className="result-count">
             <span className="status-dot" />
-            {availableRooms.length} sample spaces
+            {availableRooms.length} sample spaces available
           </p>
         </div>
 
         <p className="time-note">
-          Showing spaces for <strong>{startTime}–{endTime}</strong> on{" "}
+          Showing spaces for <strong>{startTime}–{endTimeText}</strong> on{" "}
           <strong>{new Date(`${date}T12:00:00`).toLocaleDateString("en-MY", {
             weekday: "long",
             day: "numeric",
@@ -441,64 +521,48 @@ function App() {
 
         {availableRooms.length > 0 ? (
           <div className="room-grid">
-            {availableRooms.map((room) => {
-              const seatsFree = room.librarySeats
-                ? room.librarySeats.total - room.librarySeats.occupied
-                : 0;
-
-              return (
-                <article className="room-card" key={room.name}>
-                  <div className="room-image-wrap">
-                    <img src={room.image} alt="" className="room-image" />
-                    <span className="availability">
-                      <span className="status-dot" /> Available
-                    </span>
+            {availableRooms.map((room) => (
+              <article className="room-card" key={room.name}>
+                <div className="room-info">
+                  <div className="room-title-row">
+                    <div>
+                      <p className="room-category">{room.category}</p>
+                      <h3>{room.name}</h3>
+                    </div>
+                    <span className="capacity-badge">♙ {room.capacity} people</span>
                   </div>
 
-                  <div className="room-info">
-                    <div className="room-title-row">
-                      <div>
-                        <p className="room-category">{room.category}</p>
-                        <h3>{room.name}</h3>
-                      </div>
-                      <span className="capacity-badge">♙ {room.capacity}</span>
+                  {room.librarySeats && (
+                    <div className="occupancy-box">
+                      <strong>
+                        {room.librarySeats.total - room.librarySeats.occupied} seats free
+                      </strong>
+                      <span>
+                        Simulated computer-vision count: {room.librarySeats.occupied} of{" "}
+                        {room.librarySeats.total} occupied
+                      </span>
                     </div>
+                  )}
 
-                    {room.librarySeats && (
-                      <div className="occupancy-box">
-                        <div>
-                          <span className="occupancy-label">Library occupancy · demo</span>
-                          <strong>{seatsFree} seats free</strong>
-                        </div>
-                        <span className="occupancy-icon" aria-hidden="true">◉</span>
-                        <small>
-                          Simulated computer vision count: {room.librarySeats.occupied} of{" "}
-                          {room.librarySeats.total} occupied
-                        </small>
-                      </div>
-                    )}
-
-                    <div className="feature-list">
-                      {room.features.map((feature) => (
-                        <span className="feature" key={feature}>{feature}</span>
-                      ))}
-                    </div>
-
-                    <button
-                      className="details-button"
-                      type="button"
-                      onClick={() => openRoom(room)}
-                    >
-                      View weekly timetable <span aria-hidden="true">→</span>
-                    </button>
+                  <div className="feature-list">
+                    {room.features.map((feature) => (
+                      <span className="feature" key={feature}>{feature}</span>
+                    ))}
                   </div>
-                </article>
-              );
-            })}
+
+                  <button
+                    className="details-button"
+                    type="button"
+                    onClick={() => openRoom(room)}
+                  >
+                    View weekly timetable <span aria-hidden="true">→</span>
+                  </button>
+                </div>
+              </article>
+            ))}
           </div>
         ) : (
           <div className="empty-state">
-            <span className="empty-icon" aria-hidden="true">⌕</span>
             <h3>No spaces match just yet</h3>
             <p>Try another time, group size, or facility filter.</p>
           </div>
@@ -508,8 +572,8 @@ function App() {
       <footer className="footer">
         <a className="footer-brand" href="#">SpaceLens</a>
         <p>
-          Room names are based on the visible APU Classroom Finder list.
-          Timetable and library occupancy are sample data, not live APSpace or camera data.
+          Timetables, capacities, facilities, and library occupancy are demo data.
+          Saturday, Sunday, and unscheduled hours are shown as free.
         </p>
       </footer>
 
@@ -534,13 +598,13 @@ function App() {
             <p className="eyebrow">{selectedRoom.category} · APU Campus</p>
             <h2 id="timetable-title">{selectedRoom.name}</h2>
             <p className="modal-description">
-              Weekly room timetable · sample view
+              Weekly timetable · fictional prototype schedule
             </p>
 
             <div className="week-toolbar">
               <button
-                type="button"
                 className="week-arrow"
+                type="button"
                 aria-label="Previous week"
                 onClick={() => setWeekStart(shiftDate(weekStart, -7))}
               >
@@ -548,8 +612,8 @@ function App() {
               </button>
               <strong>Week of {prettyDate(weekStart)}</strong>
               <button
-                type="button"
                 className="week-arrow"
+                type="button"
                 aria-label="Next week"
                 onClick={() => setWeekStart(shiftDate(weekStart, 7))}
               >
@@ -557,61 +621,43 @@ function App() {
               </button>
             </div>
 
-            {!selectedRoom.hasTimetableSample ? (
-              <div className="no-timetable">
-                <strong>Sample timetable not added for this room yet.</strong>
-                <span>
-                  The real university timetable needs to be supplied or connected
-                  before SpaceLens can show its actual classes.
-                </span>
-              </div>
-            ) : (
-              <div className="week-list">
-                {weekDays.map(({ day, name }, index) => {
-                  const dateOfDay = shiftDate(weekStart, index);
-                  const timeline = timelineFor(selectedRoom, day);
+            <div className="week-list">
+              {weekdays.map(({ day, name }, index) => {
+                const dateOfDay = shiftDate(weekStart, index);
+                const timeline = timelineFor(selectedRoom, day);
 
-                  return (
-                    <section className="day-section" key={name}>
-                      <div className="day-heading">
-                        <strong>{name}</strong>
-                        <span>{prettyDate(dateOfDay)}</span>
-                      </div>
+                return (
+                  <section className="day-section" key={name}>
+                    <div className="day-heading">
+                      <strong>{name}</strong>
+                      <span>{prettyDate(dateOfDay)}</span>
+                    </div>
 
-                      {timeline.length === 0 ? (
-                        <div className="day-free">No classes scheduled · free in this sample</div>
-                      ) : (
-                        timeline.map((item, itemIndex) => (
-                          <div
-                            className={`timeline-item ${item.kind}`}
-                            key={`${name}-${item.start}-${itemIndex}`}
-                          >
-                            <span className="timeline-time">
-                              {item.start}–{item.end}
+                    {timeline.map((item, itemIndex) => (
+                      <div
+                        className={`timeline-item ${item.free ? "free" : "class"}`}
+                        key={`${name}-${item.start}-${itemIndex}`}
+                      >
+                        <span className="timeline-time">
+                          {item.start}–{item.end}
+                        </span>
+                        <div>
+                          <strong>{item.title}</strong>
+                          {item.code && (
+                            <span className="timeline-sub">
+                              {item.code === "DEMO" ? "Sample timetable entry" : item.code}
                             </span>
-                            <div>
-                              <strong>{item.kind === "free" ? "Free" : item.title}</strong>
-                              {item.code && item.code !== "DEMO" && (
-                                <span className="timeline-sub">{item.code}</span>
-                              )}
-                              {item.lecturer && (
-                                <span className="timeline-sub">{item.lecturer}</span>
-                              )}
-                              {item.code === "DEMO" && (
-                                <span className="timeline-sub">Demo timetable entry</span>
-                              )}
-                            </div>
-                          </div>
-                        ))
-                      )}
-                    </section>
-                  );
-                })}
-              </div>
-            )}
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </section>
+                );
+              })}
+            </div>
 
             <p className="modal-note">
-              This prototype does not currently sync with the university timetable.
+              This dataset is generated for the prototype and does not sync with APSpace.
             </p>
           </section>
         </div>
