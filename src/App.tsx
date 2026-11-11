@@ -130,7 +130,7 @@ function getCategory(name: string) {
 }
 
 function makeTimetable(roomName: string, roomIndex: number): ClassSlot[] {
-  // This Tuesday class is copied from your screenshot.
+  // This Tuesday class is from the timetable screenshot you shared.
   if (roomName === "B-04-01") {
     return [
       {
@@ -152,7 +152,7 @@ function makeTimetable(roomName: string, roomIndex: number): ClassSlot[] {
 
   const slots: ClassSlot[] = [];
 
-  // The generated sample schedules use weekdays only.
+  // Fictional sample classes are generated for weekdays only.
   for (const day of [1, 2, 3, 4, 5]) {
     if ((roomIndex + day) % 5 === 0) continue;
 
@@ -165,6 +165,7 @@ function makeTimetable(roomName: string, roomIndex: number): ClassSlot[] {
 
     for (const blockIndex of blocksForDay) {
       const block = classBlocks[blockIndex];
+
       slots.push({
         day,
         start: block.start,
@@ -261,7 +262,9 @@ function getToday() {
 
 function App() {
   const today = getToday();
+
   const [date, setDate] = useState(today);
+  const [roomQuery, setRoomQuery] = useState("");
   const [startTime, setStartTime] = useState("09:00");
   const [durationMinutes, setDurationMinutes] = useState(120);
   const [capacity, setCapacity] = useState(2);
@@ -279,21 +282,27 @@ function App() {
       : fromMinutes(absoluteEnd);
 
   const availableRooms = useMemo(() => {
+    const query = roomQuery.trim().toLowerCase();
+
     return rooms.filter((room) => {
+      const matchesRoom =
+        !query ||
+        room.name.toLowerCase().includes(query) ||
+        room.category.toLowerCase().includes(query);
+
       const capacityMatches = room.capacity >= capacity;
       const facilitiesMatch = selectedFacilities.every((facility) =>
         room.features.includes(facility),
       );
 
       let hasClassConflict = false;
-
-      // Check every calendar day touched by the requested time interval.
       const lastOffset = Math.floor((absoluteEnd - 1) / 1440);
 
+      // Check every day touched by the requested interval, including after midnight.
       for (let offset = 0; offset <= lastOffset; offset++) {
         const weekday = (selectedWeekday + offset) % 7;
 
-        // No classes are scheduled on Saturday or Sunday in this demo.
+        // The demo dataset has no Saturday or Sunday classes.
         if (weekday === 0 || weekday === 6) continue;
 
         const intervalStart = Math.max(absoluteStart, offset * 1440) - offset * 1440;
@@ -302,22 +311,22 @@ function App() {
         hasClassConflict = room.timetable.some((slot) => {
           if (slot.day !== weekday) return false;
 
-          const overlaps =
+          return (
             intervalStart < toMinutes(slot.end) &&
-            intervalEnd > toMinutes(slot.start);
-
-          return overlaps;
+            intervalEnd > toMinutes(slot.start)
+          );
         });
 
         if (hasClassConflict) break;
       }
 
-      return capacityMatches && facilitiesMatch && !hasClassConflict;
+      return matchesRoom && capacityMatches && facilitiesMatch && !hasClassConflict;
     });
   }, [
     absoluteEnd,
     absoluteStart,
     capacity,
+    roomQuery,
     selectedFacilities,
     selectedWeekday,
   ]);
@@ -335,9 +344,20 @@ function App() {
     setWeekStart(mondayOf(date));
   }
 
+  function scrollToResults() {
+    document.getElementById("spaces")?.scrollIntoView({ behavior: "smooth" });
+  }
+
   function timelineFor(room: Room, day: number) {
     if (day === 0 || day === 6) {
-      return [{ start: "00:00", end: "24:00", title: "Free · no demo classes", free: true }];
+      return [
+        {
+          start: "00:00",
+          end: "24:00",
+          title: "Free · no demo classes",
+          free: true,
+        },
+      ];
     }
 
     const slots = room.timetable
@@ -414,6 +434,35 @@ function App() {
       </section>
 
       <section className="search-panel" aria-label="Room search filters">
+        <form
+          className="room-search"
+          role="search"
+          onSubmit={(event) => {
+            event.preventDefault();
+            scrollToResults();
+          }}
+        >
+          <div className="room-search-intro">
+            <span className="room-search-kicker">QUICK SEARCH</span>
+            <strong>Looking for a specific room?</strong>
+          </div>
+
+          <div className="room-search-input">
+            <span aria-hidden="true">⌕</span>
+            <input
+              type="search"
+              aria-label="Search rooms"
+              placeholder="Try “Tech Lab”, “Auditorium”, or “Library”"
+              value={roomQuery}
+              onChange={(event) => setRoomQuery(event.target.value)}
+            />
+          </div>
+
+          <button className="room-search-button" type="submit">
+            See availability <span aria-hidden="true">→</span>
+          </button>
+        </form>
+
         <div className="filter-fields">
           <div className="filter-field">
             <label htmlFor="date">Date</label>
@@ -473,11 +522,7 @@ function App() {
             </select>
           </div>
 
-          <button
-            className="search-button"
-            type="button"
-            onClick={() => document.getElementById("spaces")?.scrollIntoView({ behavior: "smooth" })}
-          >
+          <button className="search-button" type="button" onClick={scrollToResults}>
             Find spaces <span aria-hidden="true">↗</span>
           </button>
         </div>
@@ -512,11 +557,13 @@ function App() {
 
         <p className="time-note">
           Showing spaces for <strong>{startTime}–{endTimeText}</strong> on{" "}
-          <strong>{new Date(`${date}T12:00:00`).toLocaleDateString("en-MY", {
-            weekday: "long",
-            day: "numeric",
-            month: "long",
-          })}</strong>
+          <strong>
+            {new Date(`${date}T12:00:00`).toLocaleDateString("en-MY", {
+              weekday: "long",
+              day: "numeric",
+              month: "long",
+            })}
+          </strong>
         </p>
 
         {availableRooms.length > 0 ? (
@@ -563,8 +610,8 @@ function App() {
           </div>
         ) : (
           <div className="empty-state">
-            <h3>No spaces match just yet</h3>
-            <p>Try another time, group size, or facility filter.</p>
+            <h3>No spaces match your search</h3>
+            <p>Try another room name, time, group size, or facility.</p>
           </div>
         )}
       </section>
@@ -645,7 +692,9 @@ function App() {
                           <strong>{item.title}</strong>
                           {item.code && (
                             <span className="timeline-sub">
-                              {item.code === "DEMO" ? "Sample timetable entry" : item.code}
+                              {item.code === "DEMO"
+                                ? "Sample timetable entry"
+                                : item.code}
                             </span>
                           )}
                         </div>
