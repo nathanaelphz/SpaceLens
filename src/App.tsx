@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import "./App.css";
 
 type ClassSlot = {
@@ -9,13 +9,15 @@ type ClassSlot = {
   title: string;
 };
 
+type PlaceFilter = "all" | "library" | "discussion";
+
 type Room = {
   name: string;
   category: string;
   capacity: number;
   features: string[];
   timetable: ClassSlot[];
-  librarySeats?: { total: number; occupied: number };
+  librarySeats?: { total: number; area: "study" | "computer" };
 };
 
 const roomNames = [
@@ -42,6 +44,9 @@ const roomNames = [
   "Discussion Room 1 (4th floor Library)",
   "Discussion Room 2 (4th floor Library)",
   "Discussion Room 3 (4th floor Library)",
+  "Discussion Room 4 (4th floor Library)",
+  "Discussion Room 5 (4th floor Library)",
+  "Discussion Room 6 (4th floor Library)",
   "Library Open Study Area",
   "Library Computer Zone",
   "E-05-01 (Architecture Studio)",
@@ -130,7 +135,7 @@ function getCategory(name: string) {
 }
 
 function makeTimetable(roomName: string, roomIndex: number): ClassSlot[] {
-  // This Tuesday class is from the timetable screenshot you shared.
+  // The Tuesday class is from the timetable screenshot you shared.
   if (roomName === "B-04-01") {
     return [
       {
@@ -152,7 +157,7 @@ function makeTimetable(roomName: string, roomIndex: number): ClassSlot[] {
 
   const slots: ClassSlot[] = [];
 
-  // Fictional sample classes are generated for weekdays only.
+  // Fictional classes are generated for weekdays. Saturday and Sunday stay free.
   for (const day of [1, 2, 3, 4, 5]) {
     if ((roomIndex + day) % 5 === 0) continue;
 
@@ -165,7 +170,6 @@ function makeTimetable(roomName: string, roomIndex: number): ClassSlot[] {
 
     for (const blockIndex of blocksForDay) {
       const block = classBlocks[blockIndex];
-
       slots.push({
         day,
         start: block.start,
@@ -182,15 +186,15 @@ function makeTimetable(roomName: string, roomIndex: number): ClassSlot[] {
 const rooms: Room[] = roomNames.map((name, index) => {
   const category = getCategory(name);
   const isAuditorium = category === "Auditorium";
-  const isLibraryStudy = name === "Library Open Study Area";
-  const isLibraryComputer = name === "Library Computer Zone";
-  const isDiscussionRoom = category === "Library · Discussion room";
+  const isOpenLibrary = name === "Library Open Study Area";
+  const isComputerLibrary = name === "Library Computer Zone";
+  const isDiscussion = category === "Library · Discussion room";
 
   let capacity = 12;
   if (isAuditorium) capacity = 120;
-  else if (isLibraryStudy) capacity = 60;
-  else if (isLibraryComputer) capacity = 24;
-  else if (isDiscussionRoom) capacity = 6;
+  else if (isOpenLibrary) capacity = 60;
+  else if (isComputerLibrary) capacity = 24;
+  else if (isDiscussion) capacity = 6;
   else if (category === "Technology lab") capacity = 30;
   else if (category === "Laboratory") capacity = 24;
   else if (category === "Studio" || category === "Workshop") capacity = 20;
@@ -201,10 +205,10 @@ const rooms: Room[] = roomNames.map((name, index) => {
     capacity,
     features: facilityPatterns[index % facilityPatterns.length],
     timetable: makeTimetable(name, index),
-    librarySeats: isLibraryStudy
-      ? { total: 60, occupied: 38 }
-      : isLibraryComputer
-        ? { total: 24, occupied: 17 }
+    librarySeats: isOpenLibrary
+      ? { total: 60, area: "study" }
+      : isComputerLibrary
+        ? { total: 24, area: "computer" }
         : undefined,
   };
 });
@@ -265,12 +269,30 @@ function App() {
 
   const [date, setDate] = useState(today);
   const [roomQuery, setRoomQuery] = useState("");
+  const [placeFilter, setPlaceFilter] = useState<PlaceFilter>("all");
   const [startTime, setStartTime] = useState("09:00");
   const [durationMinutes, setDurationMinutes] = useState(120);
   const [capacity, setCapacity] = useState(2);
   const [selectedFacilities, setSelectedFacilities] = useState<string[]>([]);
   const [selectedRoom, setSelectedRoom] = useState<Room | null>(null);
   const [weekStart, setWeekStart] = useState(mondayOf(today));
+
+  // Simulated library occupancy for the prototype, not a live camera feed.
+  const [libraryOccupancy, setLibraryOccupancy] = useState({
+    study: 38,
+    computer: 17,
+  });
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setLibraryOccupancy((current) => ({
+        study: Math.max(0, Math.min(60, current.study + (Math.random() < 0.5 ? -1 : 1))),
+        computer: Math.max(0, Math.min(24, current.computer + (Math.random() < 0.5 ? -1 : 1))),
+      }));
+    }, 10000);
+
+    return () => window.clearInterval(timer);
+  }, []);
 
   const selectedWeekday = new Date(`${date}T12:00:00`).getDay();
   const absoluteStart = toMinutes(startTime);
@@ -281,16 +303,47 @@ function App() {
       ? `${fromMinutes(absoluteEnd)} (+1 day)`
       : fromMinutes(absoluteEnd);
 
+  const libraryFreeSeats =
+    (60 - libraryOccupancy.study) + (24 - libraryOccupancy.computer);
+
+  const libraryAreaCount = rooms.filter((room) =>
+    room.category === "Library · Open study" ||
+    room.category === "Library · Computer area",
+  ).length;
+
+  const discussionRoomCount = rooms.filter(
+    (room) => room.category === "Library · Discussion room",
+  ).length;
+
   const availableRooms = useMemo(() => {
     const query = roomQuery.trim().toLowerCase();
 
     return rooms.filter((room) => {
-      const matchesRoom =
+      const matchesText =
         !query ||
         room.name.toLowerCase().includes(query) ||
         room.category.toLowerCase().includes(query);
 
-      const capacityMatches = room.capacity >= capacity;
+      const isLibrarySeatArea =
+        room.category === "Library · Open study" ||
+        room.category === "Library · Computer area";
+
+      const isDiscussionRoom = room.category === "Library · Discussion room";
+
+      const matchesPlace =
+        placeFilter === "all" ||
+        (placeFilter === "library" && isLibrarySeatArea) ||
+        (placeFilter === "discussion" && isDiscussionRoom);
+
+      let roomCapacity = room.capacity;
+
+      if (room.librarySeats?.area === "study") {
+        roomCapacity = room.librarySeats.total - libraryOccupancy.study;
+      } else if (room.librarySeats?.area === "computer") {
+        roomCapacity = room.librarySeats.total - libraryOccupancy.computer;
+      }
+
+      const capacityMatches = roomCapacity >= capacity;
       const facilitiesMatch = selectedFacilities.every((facility) =>
         room.features.includes(facility),
       );
@@ -298,11 +351,10 @@ function App() {
       let hasClassConflict = false;
       const lastOffset = Math.floor((absoluteEnd - 1) / 1440);
 
-      // Check every day touched by the requested interval, including after midnight.
       for (let offset = 0; offset <= lastOffset; offset++) {
         const weekday = (selectedWeekday + offset) % 7;
 
-        // The demo dataset has no Saturday or Sunday classes.
+        // This sample dataset has no Saturday or Sunday classes.
         if (weekday === 0 || weekday === 6) continue;
 
         const intervalStart = Math.max(absoluteStart, offset * 1440) - offset * 1440;
@@ -320,12 +372,20 @@ function App() {
         if (hasClassConflict) break;
       }
 
-      return matchesRoom && capacityMatches && facilitiesMatch && !hasClassConflict;
+      return (
+        matchesText &&
+        matchesPlace &&
+        capacityMatches &&
+        facilitiesMatch &&
+        !hasClassConflict
+      );
     });
   }, [
     absoluteEnd,
     absoluteStart,
     capacity,
+    libraryOccupancy,
+    placeFilter,
     roomQuery,
     selectedFacilities,
     selectedWeekday,
@@ -339,13 +399,19 @@ function App() {
     );
   }
 
-  function openRoom(room: Room) {
-    setSelectedRoom(room);
-    setWeekStart(mondayOf(date));
+  function choosePlace(filter: PlaceFilter) {
+    setPlaceFilter(filter);
+    setRoomQuery("");
+    document.getElementById("spaces")?.scrollIntoView({ behavior: "smooth" });
   }
 
   function scrollToResults() {
     document.getElementById("spaces")?.scrollIntoView({ behavior: "smooth" });
+  }
+
+  function openRoom(room: Room) {
+    setSelectedRoom(room);
+    setWeekStart(mondayOf(date));
   }
 
   function timelineFor(room: Room, day: number) {
@@ -434,6 +500,44 @@ function App() {
       </section>
 
       <section className="search-panel" aria-label="Room search filters">
+        <div className="quick-space-links">
+          <button
+            className={`quick-space-button library ${placeFilter === "library" ? "selected" : ""}`}
+            type="button"
+            onClick={() => choosePlace("library")}
+          >
+            <span className="quick-space-icon" aria-hidden="true">⌂</span>
+            <span className="quick-space-copy">
+              <strong>Library seats</strong>
+              <small>{libraryFreeSeats} demo seats free · {libraryAreaCount} areas</small>
+            </span>
+            <span className="quick-space-arrow" aria-hidden="true">→</span>
+          </button>
+
+          <button
+            className={`quick-space-button discussion ${placeFilter === "discussion" ? "selected" : ""}`}
+            type="button"
+            onClick={() => choosePlace("discussion")}
+          >
+            <span className="quick-space-icon" aria-hidden="true">▦</span>
+            <span className="quick-space-copy">
+              <strong>Discussion rooms</strong>
+              <small>{discussionRoomCount} sample rooms · up to 6 people</small>
+            </span>
+            <span className="quick-space-arrow" aria-hidden="true">→</span>
+          </button>
+
+          {placeFilter !== "all" && (
+            <button
+              className="show-all-button"
+              type="button"
+              onClick={() => choosePlace("all")}
+            >
+              Show all rooms
+            </button>
+          )}
+        </div>
+
         <form
           className="room-search"
           role="search"
@@ -454,7 +558,10 @@ function App() {
               aria-label="Search rooms"
               placeholder="Try “Tech Lab”, “Auditorium”, or “Library”"
               value={roomQuery}
-              onChange={(event) => setRoomQuery(event.target.value)}
+              onChange={(event) => {
+                setRoomQuery(event.target.value);
+                setPlaceFilter("all");
+              }}
             />
           </div>
 
@@ -566,47 +673,66 @@ function App() {
           </strong>
         </p>
 
+        {placeFilter === "library" && (
+          <p className="demo-live-note">
+            Demo occupancy updates every 10 seconds. It is not connected to live cameras.
+          </p>
+        )}
+
         {availableRooms.length > 0 ? (
           <div className="room-grid">
-            {availableRooms.map((room) => (
-              <article className="room-card" key={room.name}>
-                <div className="room-info">
-                  <div className="room-title-row">
-                    <div>
-                      <p className="room-category">{room.category}</p>
-                      <h3>{room.name}</h3>
-                    </div>
-                    <span className="capacity-badge">♙ {room.capacity} people</span>
-                  </div>
+            {availableRooms.map((room) => {
+              const occupied =
+                room.librarySeats?.area === "study"
+                  ? libraryOccupancy.study
+                  : room.librarySeats?.area === "computer"
+                    ? libraryOccupancy.computer
+                    : 0;
 
-                  {room.librarySeats && (
-                    <div className="occupancy-box">
-                      <strong>
-                        {room.librarySeats.total - room.librarySeats.occupied} seats free
-                      </strong>
-                      <span>
-                        Simulated computer-vision count: {room.librarySeats.occupied} of{" "}
-                        {room.librarySeats.total} occupied
+              const freeSeats = room.librarySeats
+                ? room.librarySeats.total - occupied
+                : 0;
+
+              return (
+                <article className="room-card" key={room.name}>
+                  <div className="room-info">
+                    <div className="room-title-row">
+                      <div>
+                        <p className="room-category">{room.category}</p>
+                        <h3>{room.name}</h3>
+                      </div>
+                      <span className="capacity-badge">
+                        ♙ {room.librarySeats ? room.librarySeats.total : room.capacity}{" "}
+                        {room.librarySeats ? "seats" : "people"}
                       </span>
                     </div>
-                  )}
 
-                  <div className="feature-list">
-                    {room.features.map((feature) => (
-                      <span className="feature" key={feature}>{feature}</span>
-                    ))}
+                    {room.librarySeats && (
+                      <div className="occupancy-box">
+                        <strong>{freeSeats} seats free now</strong>
+                        <span>
+                          Demo live count: {occupied} of {room.librarySeats.total} occupied
+                        </span>
+                      </div>
+                    )}
+
+                    <div className="feature-list">
+                      {room.features.map((feature) => (
+                        <span className="feature" key={feature}>{feature}</span>
+                      ))}
+                    </div>
+
+                    <button
+                      className="details-button"
+                      type="button"
+                      onClick={() => openRoom(room)}
+                    >
+                      View weekly timetable <span aria-hidden="true">→</span>
+                    </button>
                   </div>
-
-                  <button
-                    className="details-button"
-                    type="button"
-                    onClick={() => openRoom(room)}
-                  >
-                    View weekly timetable <span aria-hidden="true">→</span>
-                  </button>
-                </div>
-              </article>
-            ))}
+                </article>
+              );
+            })}
           </div>
         ) : (
           <div className="empty-state">
@@ -620,7 +746,7 @@ function App() {
         <a className="footer-brand" href="#">SpaceLens</a>
         <p>
           Timetables, capacities, facilities, and library occupancy are demo data.
-          Saturday, Sunday, and unscheduled hours are shown as free.
+          Weekends and unscheduled hours are shown as free.
         </p>
       </footer>
 
@@ -692,9 +818,7 @@ function App() {
                           <strong>{item.title}</strong>
                           {item.code && (
                             <span className="timeline-sub">
-                              {item.code === "DEMO"
-                                ? "Sample timetable entry"
-                                : item.code}
+                              {item.code === "DEMO" ? "Sample timetable entry" : item.code}
                             </span>
                           )}
                         </div>
@@ -706,7 +830,7 @@ function App() {
             </div>
 
             <p className="modal-note">
-              This dataset is generated for the prototype and does not sync with APSpace.
+              This timetable is generated sample data and does not sync with APSpace.
             </p>
           </section>
         </div>
