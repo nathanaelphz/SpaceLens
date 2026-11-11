@@ -20,11 +20,11 @@
   gap: 10px;
   color: #151719;
   font-weight: 700;
-  letter-spacing: -0.04em;
   text-decoration: none;
 }
 
 .brand { font-size: 19px; }
+
 .brand-mark {
   width: 30px;
   height: 30px;
@@ -44,20 +44,13 @@
 .campus-label { color: #687078; font-size: 12px; }
 
 .hero {
-  min-height: 340px;
+  min-height: 320px;
   margin-top: 24px;
   padding: 60px 72px;
-  position: relative;
-  overflow: hidden;
-  display: flex;
-  align-items: center;
-  background:
-    radial-gradient(circle at 78% 44%, rgba(178,220,207,.6), transparent 27%),
-    linear-gradient(115deg, #f5f7f5, #e9f2ee);
+  background: linear-gradient(115deg, #f5f7f5, #e9f2ee);
   border-radius: 28px;
 }
 
-.hero-copy-block { position: relative; z-index: 1; }
 .eyebrow {
   margin: 0 0 12px;
   color: #1b6a67;
@@ -76,42 +69,13 @@
 }
 
 .hero h1 span { color: #1b6a67; }
+
 .hero-copy {
   max-width: 360px;
-  margin: 20px 0 0;
   color: #687078;
   font-size: 15px;
   line-height: 1.6;
 }
-
-.hero-orbit {
-  width: 340px;
-  height: 270px;
-  position: absolute;
-  top: 34px;
-  right: 7%;
-  display: grid;
-  place-items: center;
-}
-
-.orbit {
-  position: absolute;
-  border: 1px solid rgba(27,106,103,.22);
-  border-radius: 50%;
-}
-.orbit-one { width: 300px; height: 145px; transform: rotate(-24deg); }
-.orbit-two { width: 230px; height: 220px; transform: rotate(34deg); opacity: .7; }
-.orbit-dot {
-  width: 14px;
-  height: 14px;
-  position: absolute;
-  top: 47px;
-  right: 72px;
-  border: 4px solid #d8ece3;
-  border-radius: 50%;
-  background: #1b6a67;
-}
-.orbit-label { color: #1b6a67; text-align: center; font-size: 13px; }
 
 .search-panel {
   position: relative;
@@ -135,6 +99,7 @@
   padding: 4px 16px;
   border-right: 1px solid #eceef0;
 }
+
 .filter-field label {
   display: block;
   margin-bottom: 6px;
@@ -144,6 +109,7 @@
   letter-spacing: .08em;
   text-transform: uppercase;
 }
+
 .filter-field input, .filter-field select {
   width: 100%;
   padding: 0;
@@ -171,6 +137,7 @@
   font-weight: 650;
   cursor: pointer;
 }
+
 .search-button:hover { background: #145552; }
 
 .facility-row {
@@ -182,6 +149,7 @@
   gap: 16px;
   border-top: 1px solid #eceef0;
 }
+
 .filter-caption { color: #81888d; font-size: 12px; }
 
 .facility-check {
@@ -192,10 +160,9 @@
   font-size: 11px;
   cursor: pointer;
 }
-.facility-check input {
-  position: absolute;
-  opacity: 0;
-}
+
+.facility-check input { position: absolute; opacity: 0; }
+
 .custom-check {
   width: 17px;
   height: 17px;
@@ -207,37 +174,41 @@
   border-radius: 5px;
   font-size: 11px;
 }
+
 .facility-check input:checked + .custom-check {
   color: white;
   background: #1b6a67;
   border-color: #1b6a67;
 }
+
 .facility-check input:focus-visible + .custom-check {
   outline: 3px solid rgba(27,106,103,.25);
 }
 
 .results-section { padding: 76px 10px 80px; }
+
 .results-heading {
   display: flex;
   justify-content: space-between;
   align-items: end;
   gap: 16px;
 }
-.results-heading .eyebrow { margin-bottom: 8px; }
+
 .results-heading h2 {
   margin: 0;
   color: #171b1d;
   font-size: clamp(29px, 4vw, 40px);
   letter-spacing: -.06em;
 }
+
 .result-count {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  margin: 0 0 5px;
   color: #687078;
   font-size: 12px;
 }
+
 .status-dot {
   width: 7px;
   height: 7px;
@@ -245,48 +216,37 @@
   border-radius: 50%;
   background: #39a477;
 }
+
 .time-note { margin: 22px 0 16px; color: #7c8589; font-size: 12px; }
 .time-note strong { color: #50595c; }
 
 .room-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0,1fr));
-  gap: 20px;
+  gap: 16px;
 }
+
 .room-card {
-  overflow: hidden;
   background: white;
-  border: 1px solid #e9ecea;
-  border-radius: 18px;
-  transition: transform 180ms ease, box-shadow 180ms ease;
+  border: 1px solid #e4eae7;
+  border-radius: 16px;
+  transition: box-shadow 180ms ease, transform 180ms ease;
 }
+
 .room-card:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 15px 36px rgba(27,52,47,.09);
+  transform: translateY(-2px);
+  box-shadow: 0 12px 30px rgba(27,52,47,.08);
 }
-.room-image-wrap {
-  height: 178px;
-  position: relative;
-  overflow: hidden;
-  background: #e7eeeb;
+
+.room-info { padding: 18px; }
+
+.room-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: 10px;
 }
-.room-image { width: 100%; height: 100%; object-fit: cover; }
-.availability {
-  position: absolute;
-  top: 13px;
-  left: 13px;
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 7px 10px;
-  color: #2f6250;
-  background: rgba(255,255,255,.94);
-  border-radius: 999px;
-  font-size: 10px;
-  font-weight: 650;
-}
-.room-info { padding: 18px 18px 14px; }
-.room-title-row { display: flex; justify-content: space-between; gap: 10px; }
+
 .room-category {
   margin: 0 0 6px;
   color: #81898b;
@@ -294,13 +254,14 @@
   font-weight: 600;
   text-transform: uppercase;
 }
+
 .room-title-row h3 {
   margin: 0;
   color: #1e2425;
   font-size: 16px;
   line-height: 1.3;
-  letter-spacing: -.035em;
 }
+
 .capacity-badge {
   padding: 6px 8px;
   color: #687078;
@@ -309,22 +270,35 @@
   font-size: 10px;
   white-space: nowrap;
 }
-.feature-list { min-height: 28px; margin: 15px 0 8px; display: flex; flex-wrap: wrap; gap: 6px; }
-.feature { padding: 5px 8px; color: #66716e; background: #f5f7f6; border-radius: 6px; font-size: 9px; }
 
 .occupancy-box {
   margin-top: 14px;
   padding: 11px;
-  position: relative;
+  display: grid;
+  gap: 5px;
   background: #edf6f1;
   border: 1px solid #d9ebe1;
   border-radius: 11px;
 }
-.occupancy-box div { display: flex; justify-content: space-between; gap: 8px; }
-.occupancy-label { color: #648074; font-size: 9px; }
+
 .occupancy-box strong { color: #1b6a67; font-size: 11px; }
-.occupancy-box small { display: block; margin-top: 6px; color: #778982; font-size: 9px; }
-.occupancy-icon { position: absolute; right: 10px; bottom: 24px; color: #79a893; }
+.occupancy-box span { color: #778982; font-size: 9px; }
+
+.feature-list {
+  min-height: 28px;
+  margin: 15px 0 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.feature {
+  padding: 5px 8px;
+  color: #66716e;
+  background: #f5f7f6;
+  border-radius: 6px;
+  font-size: 9px;
+}
 
 .details-button {
   width: 100%;
@@ -342,13 +316,13 @@
 }
 
 .empty-state {
-  padding: 70px 20px;
+  padding: 60px 20px;
   text-align: center;
   background: #f7f9f8;
   border: 1px dashed #d6dfda;
   border-radius: 18px;
 }
-.empty-state h3 { margin: 12px 0 6px; }
+
 .empty-state p { color: #737c80; font-size: 13px; }
 
 .footer {
@@ -359,8 +333,15 @@
   gap: 20px;
   border-top: 1px solid #e8e9ec;
 }
+
 .footer-brand { font-size: 14px; }
-.footer p { max-width: 650px; color: #838b8e; font-size: 10px; text-align: right; }
+
+.footer p {
+  max-width: 650px;
+  color: #838b8e;
+  font-size: 10px;
+  text-align: right;
+}
 
 .modal-backdrop {
   position: fixed;
@@ -372,6 +353,7 @@
   background: rgba(15,24,23,.48);
   backdrop-filter: blur(5px);
 }
+
 .timetable-modal {
   width: min(760px, 100%);
   max-height: 90vh;
@@ -382,6 +364,7 @@
   border-radius: 22px;
   box-shadow: 0 25px 90px rgba(0,0,0,.2);
 }
+
 .modal-close {
   width: 34px;
   height: 34px;
@@ -395,8 +378,10 @@
   font-size: 22px;
   cursor: pointer;
 }
+
 .timetable-modal h2 { margin: 0; padding-right: 35px; letter-spacing: -.05em; }
 .modal-description, .modal-note { color: #77817f; font-size: 11px; }
+
 .week-toolbar {
   margin: 20px 0 14px;
   padding: 10px;
@@ -408,6 +393,7 @@
   color: #43514d;
   font-size: 12px;
 }
+
 .week-arrow {
   width: 34px;
   height: 32px;
@@ -417,7 +403,14 @@
   border-radius: 8px;
   cursor: pointer;
 }
-.day-section { margin-top: 10px; border: 1px solid #e9eeeb; border-radius: 12px; overflow: hidden; }
+
+.day-section {
+  margin-top: 10px;
+  border: 1px solid #e9eeeb;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
 .day-heading {
   padding: 10px 13px;
   display: flex;
@@ -426,7 +419,9 @@
   color: #35413d;
   font-size: 11px;
 }
+
 .day-heading span { color: #818b87; }
+
 .timeline-item {
   padding: 11px 13px;
   display: grid;
@@ -435,22 +430,13 @@
   border-top: 1px solid #edf0ee;
   font-size: 11px;
 }
+
 .timeline-item.free { color: #286b57; background: #f4faf6; }
 .timeline-item.class { color: #444e4b; background: white; }
 .timeline-time { color: #73807a; font-variant-numeric: tabular-nums; }
 .timeline-sub { display: block; margin-top: 4px; color: #818b87; font-size: 10px; }
-.day-free, .no-timetable {
-  padding: 14px;
-  color: #557866;
-  background: #f4faf6;
-  font-size: 11px;
-}
-.no-timetable { display: grid; gap: 7px; color: #52625c; background: #f7f9f8; }
-.no-timetable span { color: #78827e; line-height: 1.5; }
 
 @media (max-width: 900px) {
-  .hero { padding: 52px; }
-  .hero-orbit { right: -3%; opacity: .7; }
   .filter-fields { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; }
   .filter-field { padding: 8px 10px; border-right: 0; border-bottom: 1px solid #eceef0; }
   .search-button { grid-column: 1 / -1; }
@@ -462,23 +448,18 @@
   .topbar { height: 64px; }
   .brand { font-size: 16px; }
   .campus-label { display: none; }
-  .hero { min-height: 300px; margin-top: 14px; padding: 38px 27px; border-radius: 21px; }
+  .hero { min-height: 280px; margin-top: 14px; padding: 38px 27px; border-radius: 21px; }
   .hero h1 { font-size: 58px; }
-  .hero-copy { max-width: 240px; font-size: 13px; }
-  .hero-orbit { width: 170px; height: 170px; right: -55px; top: 100px; opacity: .45; }
-  .orbit-one { width: 170px; height: 90px; }
-  .orbit-two { width: 130px; height: 145px; }
+  .hero-copy { max-width: 250px; font-size: 13px; }
   .search-panel { margin: -22px 8px 0; padding: 10px; }
   .filter-fields { gap: 5px; }
   .filter-field { padding: 8px 6px; }
   .filter-field input, .filter-field select { font-size: 12px; }
   .facility-row { padding: 12px 6px 4px; gap: 11px; }
-  .facility-caption { width: 100%; }
   .facility-check { font-size: 10px; }
   .results-section { padding: 56px 2px 54px; }
   .results-heading { align-items: start; flex-direction: column; }
-  .room-grid { grid-template-columns: 1fr; gap: 14px; }
-  .room-image-wrap { height: 190px; }
+  .room-grid { grid-template-columns: 1fr; gap: 12px; }
   .footer { padding: 18px 0; align-items: start; flex-direction: column; }
   .footer p { text-align: left; }
   .timetable-modal { padding: 27px 18px; }
