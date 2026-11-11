@@ -465,3 +465,165 @@
   .timetable-modal { padding: 27px 18px; }
   .timeline-item { grid-template-columns: 78px 1fr; gap: 8px; }
 }
+
+/* Clearer colors and contrast */
+body {
+  background: #f7f9fc;
+  color: #18212f;
+}
+
+.topbar {
+  background: #fff;
+}
+
+.hero {
+  background: linear-gradient(120deg, #eef6f4 0%, #e5f1f7 100%);
+  border: 1px solid #d9e7e5;
+}
+
+.search-panel {
+  border-color: #d8e1ea;
+  box-shadow: 0 14px 34px rgba(25, 48, 72, 0.1);
+}
+
+.filter-field:focus-within {
+  border-radius: 8px;
+  background: #f0f7fa;
+}
+
+.facility-check {
+  padding: 7px 9px;
+  border-radius: 8px;
+}
+
+.facility-check:hover {
+  background: #eef5f8;
+}
+
+.room-card {
+  border-color: #dce4ec;
+  box-shadow: 0 4px 14px rgba(25, 48, 72, 0.04);
+}
+
+.room-category {
+  color: #17635f;
+}
+
+.capacity-badge {
+  color: #24415b;
+  background: #eaf1f7;
+  font-weight: 700;
+}
+
+.feature {
+  color: #294963;
+  background: #edf3f7;
+  border: 1px solid #dfe8ee;
+}
+
+/* Timetable header and day separation */
+.timetable-modal {
+  background: #f9fbfe;
+}
+
+.week-toolbar {
+  color: #17324c;
+  background: #dceaf2;
+  border: 1px solid #c7dce8;
+}
+
+.week-arrow {
+  color: #173f63;
+  border-color: #b9cfdd;
+}
+
+.day-section {
+  margin-top: 16px;
+  background: #fff;
+  border: 1px solid #cbd8e3;
+  box-shadow: 0 3px 10px rgba(25, 48, 72, 0.05);
+}
+
+.day-heading {
+  min-height: 48px;
+  align-items: center;
+  color: #17324c;
+  background: #d8e9f2;
+  font-size: 13px;
+}
+
+.day-section:nth-child(even) .day-heading {
+  color: #392d68;
+  background: #e8e2f7;
+}
+
+.day-heading span {
+  padding: 4px 8px;
+  color: #344c60;
+  background: rgba(255, 255, 255, 0.8);
+  border-radius: 6px;
+  font-weight: 600;
+}
+
+/* Green rows mean free; blue rows mean a scheduled class */
+.timeline-item {
+  min-height: 58px;
+  align-items: center;
+  padding: 12px 14px;
+  border-top: 1px solid #dce4e9;
+}
+
+.timeline-item.free {
+  color: #14532d;
+  background: #e5f5e9;
+  border-left: 6px solid #239653;
+}
+
+.timeline-item.class {
+  color: #173b78;
+  background: #e8efff;
+  border-left: 6px solid #426bd4;
+}
+
+.timeline-time {
+  width: fit-content;
+  padding: 5px 8px;
+  color: #263f5a;
+  background: rgba(255, 255, 255, 0.8);
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.timeline-item.free strong {
+  color: #14532d;
+}
+
+.timeline-item.class strong {
+  color: #173b78;
+}
+
+.timeline-sub {
+  color: #415b80;
+}
+
+.modal-description,
+.modal-note {
+  color: #506174;
+  line-height: 1.5;
+}
+
+@media (max-width: 600px) {
+  .day-heading {
+    min-height: 44px;
+  }
+
+  .timeline-item {
+    grid-template-columns: 88px 1fr;
+    padding: 10px 8px;
+  }
+
+  .timeline-time {
+    font-size: 10px;
+  }
+}
