@@ -7,6 +7,7 @@ type ClassSlot = {
   end: string;
   code: string;
   title: string;
+  eventType?: "class" | "booking";
 };
 
 type PlaceFilter = "all" | "library" | "discussion";
@@ -17,6 +18,9 @@ type Room = {
   capacity: number;
   facilities: string[];
   timetable: ClassSlot[];
+  building: string;
+  floor: string;
+  distanceM: number;
   libraryArea?: "study" | "computer";
   librarySeatTotal?: number;
 };
@@ -25,6 +29,7 @@ type RoomMatch = {
   room: Room;
   score: number;
   reasons: string[];
+  breakdown: string[];
 };
 
 type AlternativeTime = {
@@ -109,15 +114,6 @@ const facilityOptions = [
   "Video conferencing",
 ];
 
-const facilityPatterns = [
-  ["Whiteboard", "Projector", "Power outlets"],
-  ["Whiteboard", "Power outlets"],
-  ["Projector", "Video conferencing"],
-  ["Power outlets", "Quiet study"],
-  ["Whiteboard", "Video conferencing"],
-  ["Projector", "Power outlets", "Quiet study"],
-];
-
 const classBlocks = [
   { start: "08:30", end: "10:30" },
   { start: "10:30", end: "12:30" },
@@ -170,10 +166,57 @@ function getCategory(name: string) {
   return "Campus space";
 }
 
+function facilitiesFor(category: string): string[] {
+  if (category === "Library · Open study") return ["Quiet study", "Power outlets"];
+  if (category === "Library · Computer area") return ["Power outlets"];
+  if (category === "Library · Discussion room") {
+    return ["Whiteboard", "Power outlets", "Video conferencing"];
+  }
+  if (category === "Auditorium" || category === "Meeting room") {
+    return ["Projector", "Whiteboard", "Power outlets", "Video conferencing"];
+  }
+  if (category === "Technology lab") return ["Power outlets", "Projector"];
+  if (category === "Laboratory") return ["Whiteboard", "Power outlets"];
+  if (category === "Studio" || category === "Workshop") {
+    return ["Whiteboard", "Power outlets", "Quiet study"];
+  }
+  return ["Whiteboard", "Projector", "Power outlets"];
+}
+
+function locationFor(name: string) {
+  const block = name.match(/Block ([A-Z])/i)?.[1] || name.match(/^([A-Z])-/)?.[1];
+  const level = name.match(/Level (\d+)/i)?.[1] ||
+    name.match(/(\d+)(?:st|nd|rd|th) floor/i)?.[1] ||
+    name.match(/^[A-Z]-(\d{2})-/)?.[1]?.[0] ||
+    name.match(/Tech Lab (\d)-/)?.[1];
+  return {
+    building: name.toLowerCase().includes("library") || name.toLowerCase().includes("discussion")
+      ? "Library"
+      : block ? `Block ${block}` : "APU Campus",
+    floor: level ? `Level ${level}` : "Campus",
+  };
+}
+
 function makeRoomTimetable(name: string, index: number, category: string): ClassSlot[] {
   // Library study areas use occupancy data and do not show class timetables.
   if (category === "Library · Open study" || category === "Library · Computer area") {
     return [];
+  }
+
+  // Discussion rooms use sample reservations, not teaching classes.
+  if (category === "Library · Discussion room") {
+    const day = index % 2 === 0 ? 2 : 4;
+    const start = index % 3 === 0 ? "10:00" : "14:00";
+    const [hourText, minuteText] = start.split(":");
+    const end = `${String(Number(hourText) + 1).padStart(2, "0")}:${minuteText}`;
+    return [{
+      day,
+      start,
+      end,
+      code: `BOOKING-${String(index - 19).padStart(2, "0")}`,
+      title: "Sample discussion-room booking",
+      eventType: "booking",
+    }];
   }
 
   // This class is visible in the timetable screenshot you shared.
@@ -244,8 +287,11 @@ const rooms: Room[] = roomNames.map((name, index) => {
     name,
     category,
     capacity,
-    facilities: facilityPatterns[index % facilityPatterns.length],
+    facilities: facilitiesFor(category),
     timetable: makeRoomTimetable(name, index, category),
+    building: locationFor(name).building,
+    floor: locationFor(name).floor,
+    distanceM: 80 + ((index * 137) % 620),
     libraryArea: isLibraryStudy ? "study" : isLibraryComputer ? "computer" : undefined,
     librarySeatTotal: isLibraryStudy ? 60 : isLibraryComputer ? 24 : undefined,
   };
@@ -319,11 +365,14 @@ function hasOverlap(
 }
 
 function roomHasConflict(room: Room, date: string, startTime: string, duration: number) {
+  const start = toMinutes(startTime);
+  const end = start + duration;
+  // Prototype operating hours: 08:00–22:00. This also prevents midnight alternatives.
+  if (start < 8 * 60 || end > 22 * 60) return true;
+  if (date === getToday() && start < new Date().getHours() * 60 + new Date().getMinutes()) return true;
   if (room.libraryArea) return false;
 
   const weekday = new Date(`${date}T12:00:00`).getDay();
-  const start = toMinutes(startTime);
-  const end = start + duration;
   const lastDayOffset = Math.floor((end - 1) / 1440);
 
   for (let offset = 0; offset <= lastDayOffset; offset++) {
@@ -341,7 +390,12 @@ function roomHasConflict(room: Room, date: string, startTime: string, duration: 
   return false;
 }
 
-function studentHasClassConflict(date: string, startTime: string, duration: number) {
+function studentHasClassConflict(
+  date: string,
+  startTime: string,
+  duration: number,
+  schedule: ClassSlot[] = sampleStudentTimetable,
+) {
   const weekday = new Date(`${date}T12:00:00`).getDay();
   const start = toMinutes(startTime);
   const end = start + duration;
@@ -354,10 +408,41 @@ function studentHasClassConflict(date: string, startTime: string, duration: numb
     const segmentStart = Math.max(start, offset * 1440) - offset * 1440;
     const segmentEnd = Math.min(end, (offset + 1) * 1440) - offset * 1440;
 
-    if (hasOverlap(sampleStudentTimetable, day, segmentStart, segmentEnd)) return true;
+    if (hasOverlap(schedule, day, segmentStart, segmentEnd)) return true;
   }
 
   return false;
+}
+
+function parseIcsSchedule(contents: string): ClassSlot[] {
+  return contents.split("BEGIN:VEVENT").slice(1).flatMap((event, index) => {
+    const startLine = event.match(/^DTSTART[^:]*:(.+)$/m)?.[1]?.trim();
+    const endLine = event.match(/^DTEND[^:]*:(.+)$/m)?.[1]?.trim();
+    const title = (event.match(/^SUMMARY:(.+)$/m)?.[1] || "Imported class")
+      .replace(/\\,/g, ",").replace(/\\;/g, ";").replace(/\\n/g, " ");
+    if (!startLine || !endLine || startLine.length < 13 || endLine.length < 13) return [];
+    const startDate = startLine.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})/);
+    const endDate = endLine.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})/);
+    if (!startDate || !endDate) return [];
+    const day = new Date(Number(startDate[1]), Number(startDate[2]) - 1, Number(startDate[3])).getDay();
+    const start = `${startDate[4]}:${startDate[5]}`;
+    const end = `${endDate[4]}:${endDate[5]}`;
+    return [{ day, start, end, code: `ICS-${index + 1}`, title, eventType: "class" as const }];
+  });
+}
+
+function nextFreeSlot(room: Room, fromDate: string, startAfter: string, duration: number) {
+  for (let dayOffset = 0; dayOffset < 14; dayOffset++) {
+    const candidateDate = addDays(fromDate, dayOffset);
+    const min = dayOffset === 0 ? Math.max(8 * 60, toMinutes(startAfter)) : 8 * 60;
+    for (let minute = min; minute + duration <= 22 * 60; minute += 30) {
+      const time = fromMinutes(minute);
+      if (!roomHasConflict(room, candidateDate, time, duration)) {
+        return { date: candidateDate, time };
+      }
+    }
+  }
+  return null;
 }
 
 function App() {
@@ -371,7 +456,11 @@ function App() {
   const [placeFilter, setPlaceFilter] = useState<PlaceFilter>("all");
   const [selectedFacilities, setSelectedFacilities] = useState<string[]>([]);
   const [useSampleSchedule, setUseSampleSchedule] = useState(true);
+  const [studentSchedule, setStudentSchedule] = useState(sampleStudentTimetable);
+  const [scheduleLabel, setScheduleLabel] = useState("Sample student schedule");
   const [selectedRoom, setSelectedRoom] = useState<Room | null>(null);
+  const [adminOpen, setAdminOpen] = useState(false);
+  const [roomVerifications, setRoomVerifications] = useState<Record<string, { status: "free" | "occupied"; at: number }>>({});
   const [studentScheduleOpen, setStudentScheduleOpen] = useState(false);
   const [weekStart, setWeekStart] = useState(mondayOf(today));
 
@@ -399,7 +488,7 @@ function App() {
 
   const searchResults = useMemo(() => {
     const query = roomQuery.trim().toLowerCase();
-    const studentConflict = studentHasClassConflict(date, startTime, duration);
+    const studentConflict = studentHasClassConflict(date, startTime, duration, studentSchedule);
 
     function matchesPlace(room: Room) {
       if (placeFilter === "all") return true;
@@ -432,14 +521,29 @@ function App() {
       );
     }
 
-    function scoreRoom(room: Room, candidateDate: string, candidateTime: string) {
+    function scoreBreakdown(room: Room, candidateDate: string, candidateTime: string) {
       const capacity = availableCapacity(room);
-      const profileGap = !useSampleSchedule ||
-        !studentHasClassConflict(candidateDate, candidateTime, duration);
-      const capacityFit = Math.round(15 * Math.min(1, people / Math.max(1, capacity)));
-      const facilityFit = selectedFacilities.length > 0 ? 10 : 6;
-      const scheduleFit = profileGap ? 20 : 8;
-      return Math.min(99, 59 + capacityFit + facilityFit + scheduleFit);
+      const capacityFit = Math.max(10, Math.round(25 - Math.max(0, capacity - people) * 0.22));
+      const facilityFit = selectedFacilities.length
+        ? Math.round(25 * selectedFacilities.filter((facility) => room.facilities.includes(facility)).length / selectedFacilities.length)
+        : 15;
+      const scheduleFit = !useSampleSchedule
+        ? 12
+        : studentHasClassConflict(candidateDate, candidateTime, duration, studentSchedule) ? 8 : 25;
+      const proximityFit = Math.max(5, 25 - Math.round(room.distanceM / 40));
+      return {
+        total: Math.min(100, capacityFit + facilityFit + scheduleFit + proximityFit),
+        labels: [
+          `Capacity ${capacityFit}/25`,
+          `Facilities ${facilityFit}/25`,
+          `Schedule gap ${scheduleFit}/25`,
+          `Proximity ${proximityFit}/25`,
+        ],
+      };
+    }
+
+    function scoreRoom(room: Room, candidateDate: string, candidateTime: string) {
+      return scoreBreakdown(room, candidateDate, candidateTime).total;
     }
 
     function reasonsFor(room: Room) {
@@ -467,6 +571,7 @@ function App() {
         room,
         score: scoreRoom(room, date, startTime),
         reasons: reasonsFor(room),
+        breakdown: scoreBreakdown(room, date, startTime).labels,
       }))
       .sort((a, b) => b.score - a.score || a.room.name.localeCompare(b.room.name));
 
@@ -480,10 +585,11 @@ function App() {
             ? Math.ceil((toMinutes(startTime) + 30) / 30) * 30
             : 8 * 60;
 
-        // Scan half-hour increments. Midnight can be a valid result because there are no demo classes then.
+        // Scan only during the prototype's 08:00–22:00 operating hours.
+        firstMinute = Math.max(firstMinute, 8 * 60);
         for (
           let minute = firstMinute;
-          minute + duration <= 1440 && alternatives.length < 3;
+          minute + duration <= 22 * 60 && alternatives.length < 3;
           minute += 30
         ) {
           const candidateTime = fromMinutes(minute);
@@ -518,6 +624,7 @@ function App() {
     selectedFacilities,
     startTime,
     useSampleSchedule,
+    studentSchedule,
   ]);
 
   function toggleFacility(facility: string) {
@@ -552,13 +659,61 @@ function App() {
 
   function openStudentSchedule() {
     setSelectedRoom(null);
+    setAdminOpen(false);
     setWeekStart(mondayOf(date));
     setStudentScheduleOpen(true);
+  }
+
+  function openAdminDashboard() {
+    setSelectedRoom(null);
+    setStudentScheduleOpen(false);
+    setAdminOpen(true);
+  }
+
+  function verifyRoom(room: Room, status: "free" | "occupied") {
+    setRoomVerifications((current) => ({
+      ...current,
+      [room.name]: { status, at: Date.now() },
+    }));
+  }
+
+  async function importStudentIcs(file: File | undefined) {
+    if (!file) return;
+    const imported = parseIcsSchedule(await file.text());
+    if (imported.length === 0) {
+      window.alert("I couldn’t read any timed events from that .ics file.");
+      return;
+    }
+    setStudentSchedule(imported);
+    setScheduleLabel("Imported .ics timetable");
+    setUseSampleSchedule(true);
+  }
+
+  function findMyNextGap() {
+    const requestedStart = date < today ? today : date;
+    const earliest = requestedStart === today
+      ? Math.max(8 * 60, Math.ceil((new Date().getHours() * 60 + new Date().getMinutes()) / 30) * 30)
+      : 8 * 60;
+    for (let dayOffset = 0; dayOffset < 14; dayOffset++) {
+      const candidateDate = addDays(requestedStart, dayOffset);
+      for (let minute = dayOffset === 0 ? earliest : 8 * 60; minute + duration <= 22 * 60; minute += 30) {
+        const candidateTime = fromMinutes(minute);
+        if (!studentHasClassConflict(candidateDate, candidateTime, duration, studentSchedule)) {
+          setDate(candidateDate);
+          setStartTime(candidateTime);
+          setUseSampleSchedule(true);
+          scrollToResults();
+          return;
+        }
+      }
+    }
+    window.alert("No matching gap found in the next two weeks. Try a shorter duration.");
   }
 
   function closeDialog() {
     setSelectedRoom(null);
     setStudentScheduleOpen(false);
+    setAdminOpen(false);
   }
 
   function availableCapacity(room: Room) {
@@ -637,7 +792,7 @@ function App() {
       }];
     }
 
-    const slots = sampleStudentTimetable
+    const slots = studentSchedule
       .filter((slot) => slot.day === day)
       .sort((a, b) => toMinutes(a.start) - toMinutes(b.start));
 
@@ -688,6 +843,13 @@ function App() {
   const endMinutes = toMinutes(startTime) + duration;
   const endTime = fromMinutes(endMinutes);
   const endTimeLabel = endMinutes >= 1440 ? `${endTime} (+1 day)` : endTime;
+  const nowMinutes = new Date().getHours() * 60 + new Date().getMinutes();
+  const roundedNow = Math.ceil(nowMinutes / 30) * 30;
+  const earliestTime = date === today
+    ? `${String(Math.floor(Math.max(8 * 60, roundedNow) / 60)).padStart(2, "0")}:${String(Math.max(8 * 60, roundedNow) % 60).padStart(2, "0")}`
+    : "08:00";
+  const latestStartMinutes = 22 * 60 - duration;
+  const latestStartTime = `${String(Math.floor(latestStartMinutes / 60)).padStart(2, "0")}:${String(latestStartMinutes % 60).padStart(2, "0")}`;
 
   return (
     <main className="app-shell">
@@ -700,6 +862,7 @@ function App() {
         <nav className="nav-links" aria-label="Main navigation">
           <a className="active" href="#finder">Find a space</a>
           <button type="button" onClick={openStudentSchedule}>My schedule</button>
+          <button type="button" onClick={openAdminDashboard}>Campus insights</button>
         </nav>
 
         <div className="profile-label">
@@ -760,8 +923,13 @@ function App() {
             <input
               id="start-time"
               type="time"
+              min={earliestTime}
+              max={latestStartTime}
               value={startTime}
-              onChange={(event) => setStartTime(event.target.value)}
+              onChange={(event) => {
+                const chosen = event.target.value;
+                setStartTime(chosen < earliestTime ? earliestTime : chosen > latestStartTime ? latestStartTime : chosen);
+              }}
             />
           </div>
 
@@ -812,6 +980,10 @@ function App() {
             </label>
           ))}
         </div>
+        <button className="find-gap-button" type="button" onClick={findMyNextGap}>
+          Find my next class gap <span aria-hidden="true">↗</span>
+        </button>
+        <p className="hours-note">Search hours: 08:00–22:00 · past times are excluded</p>
       </section>
 
       <section className="quick-row" aria-label="Popular space types">
@@ -886,7 +1058,7 @@ function App() {
 
         {searchResults.matches.length > 0 ? (
           <div className="room-list">
-            {searchResults.matches.map(({ room, score, reasons }, index) => {
+            {searchResults.matches.map(({ room, score, reasons, breakdown }, index) => {
               const isLibrary = Boolean(room.libraryArea);
               const seatsAvailable = isLibrary ? availableCapacity(room) : 0;
 
@@ -916,12 +1088,32 @@ function App() {
                       )}
                     </div>
 
+                    <p className="room-location">
+                      {room.building} · {room.floor} · estimated proximity · about {room.distanceM} m (demo)
+                    </p>
+                    <p className="next-free-line">
+                      {isLibrary
+                        ? "Seat estimate changes during this demo · no future class timetable"
+                        : <>Next free slot: {(() => {
+                            const next = nextFreeSlot(room, date, startTime, duration);
+                            return next ? `${longDate(next.date)} at ${next.time}` : "No slot found in the next two weeks";
+                          })()}</>}
+                    </p>
                     <div className="reason-list">
                       {reasons.map((reason) => (
                         <span className="reason-pill" key={reason}>{reason}</span>
                       ))}
                     </div>
-
+                    <p className="score-breakdown">{score} / 100 · {breakdown.join(" · ")}</p>
+                    <div className="verify-row">
+                      {roomVerifications[room.name] && (
+                        <span className={`verified-status ${roomVerifications[room.name].status}`}>
+                          {roomVerifications[room.name].status === "free" ? "Reported free" : "Reported occupied"} · reported {Math.max(0, Math.floor((Date.now() - roomVerifications[room.name].at) / 60000))} min ago · local demo
+                        </span>
+                      )}
+                      <button type="button" onClick={() => verifyRoom(room, "free")}>Still free</button>
+                      <button type="button" onClick={() => verifyRoom(room, "occupied")}>Occupied</button>
+                    </div>
                     <div className="facility-list">
                       {room.facilities.map((facility) => (
                         <span className="facility-pill" key={facility}>{facility}</span>
@@ -1015,10 +1207,10 @@ function App() {
 
       <footer className="footer">
         <span className="footer-brand">SpaceLens</span>
-        <span>APU smart-campus concept · Hackathon prototype</span>
+        <span>APU smart-campus concept · Demo schedules and occupancy are simulated</span>
       </footer>
 
-      {(selectedRoom || studentScheduleOpen) && (
+      {(selectedRoom || studentScheduleOpen || adminOpen) && (
         <div className="modal-backdrop" onClick={closeDialog}>
           <section
             className="detail-modal"
@@ -1036,7 +1228,39 @@ function App() {
               ×
             </button>
 
-            {selectedRoom?.libraryArea ? (
+            {adminOpen ? (
+              <>
+                <p className="eyebrow">CAMPUS INSIGHTS · SIMULATED DATA</p>
+                <h2 id="detail-title">Space utilisation overview</h2>
+                <p className="modal-intro">A demo view of how campus teams could spot underused spaces and busy periods. This is generated prototype data.</p>
+                <div className="admin-metrics">
+                  <article><strong>{rooms.length}</strong><span>spaces listed</span></article>
+                  <article><strong>{rooms.filter((room) => !room.libraryArea && room.timetable.length <= 1).length}</strong><span>underused demo rooms</span></article>
+                  <article><strong>{librarySeatsFree}</strong><span>estimated library seats free</span></article>
+                </div>
+                <section className="admin-panel">
+                  <h3>Peak sample class times</h3>
+                  <div className="admin-bars">
+                    {["08:30", "10:30", "13:00", "15:00"].map((time) => {
+                      const count = rooms.filter((room) => room.timetable.some((slot) => slot.start === time)).length;
+                      return <div key={time}><span>{time}</span><div><i style={{ width: `${Math.max(4, count / rooms.length * 100)}%` }} /></div><b>{count}</b></div>;
+                    })}
+                  </div>
+                </section>
+                <section className="admin-panel cloud-roadmap">
+                  <h3>Cloud rollout plan</h3>
+                  <p><strong>Live prototype:</strong> SpaceLens frontend is hosted on Vercel.</p>
+                  <p><strong>Next cloud step:</strong> Firebase / Google Cloud Functions + Firestore for shared room status and timetable data.</p>
+                  <p><strong>Later pilot:</strong> import an approved timetable feed and aggregate library counts; test one library floor first. Gemini function calling can power the assistant from a secured server endpoint.</p>
+                  <p className="modal-note">These backend and AI connections are proposed, not connected in this prototype.</p>
+                </section>
+                <section className="survey-note">
+                  <strong>Impact evidence to collect</strong>
+                  <p>Survey 30–50 APU students about time spent finding spaces. No survey results have been collected, so this demo shows no invented impact statistics.</p>
+                </section>
+                <p className="modal-note">Privacy by design: aggregate counts only, with no cameras or personal tracking in this concept. Real deployment would need APU approval and privacy review. Room reports stay in this browser session.</p>
+              </>
+            ) : selectedRoom?.libraryArea ? (
               <>
                 <p className="eyebrow">SIMULATED OCCUPANCY · LIBRARY</p>
                 <h2 id="detail-title">{selectedRoom.name}</h2>
@@ -1068,8 +1292,13 @@ function App() {
                 <p className="eyebrow">DEMO STUDENT PROFILE</p>
                 <h2 id="detail-title">Sample weekly schedule</h2>
                 <p className="modal-intro">
-                  SpaceLens uses this sample timetable to award a schedule-gap match bonus.
+                  SpaceLens uses a {scheduleLabel.toLowerCase()} to identify available gaps.
                 </p>
+                <label className="ics-upload">
+                  <span>Use your own timetable</span>
+                  <input type="file" accept=".ics,text/calendar" onChange={(event) => void importStudentIcs(event.target.files?.[0])} />
+                  <small>Import an .ics calendar file. It stays in this browser demo.</small>
+                </label>
                 <div className="schedule-week">
                   {weekDays.map(({ day, name }, index) => {
                     const dayDate = addDays(weekStart, index);
@@ -1101,7 +1330,15 @@ function App() {
                 <p className="eyebrow">WEEKLY ROOM TIMETABLE · DEMO</p>
                 <h2 id="detail-title">{selectedRoom.name}</h2>
                 <p className="modal-intro">
-                  Blue rows show sample scheduled classes. Green rows show no sample class conflict.
+                  {selectedRoom.category === "Library · Discussion room"
+                    ? "Blue rows show sample bookings. Green rows show open times."
+                    : "Blue rows show sample scheduled classes. Green rows show no sample class conflict."}
+                </p>
+                <p className="next-free-line modal-next-free">
+                  Next free slot: {(() => {
+                    const next = nextFreeSlot(selectedRoom, date, startTime, duration);
+                    return next ? `${longDate(next.date)} at ${next.time}` : "No slot found in the next two weeks";
+                  })()}
                 </p>
 
                 <div className="week-toolbar">
@@ -1167,7 +1404,7 @@ function App() {
         startTime={startTime}
         duration={duration}
         libraryOccupied={libraryOccupied}
-        onSelectRoom={setSelectedRoom}
+        onSelectRoom={openRoom}
       />
     </main>
   );
@@ -1208,7 +1445,7 @@ function SpaceLensChatbot({
     if (!request) return;
 
     const lower = request.toLowerCase();
-    const peopleMatch = lower.match(/\b(?:for|with)\s+(\d{1,3})\b|\b(\d{1,3})\s*(?:people|person|students|pax|of us)\b/);
+    const peopleMatch = lower.match(/\b(?:for|with)\s+(\d{1,3})(?!\s*(?:hours?|hrs?|minutes?|mins?))\b|\b(\d{1,3})\s*(?:people|person|students|pax|of us)\b/);
     const requestedPeople = peopleMatch ? Number(peopleMatch[1] || peopleMatch[2]) : 1;
     const durationMatch = lower.match(/\b(\d+)\s*(hours?|hrs?|minutes?|mins?)\b/);
     const requestedDuration = durationMatch
@@ -1232,14 +1469,15 @@ function SpaceLensChatbot({
       requestedDate = addDays(date, (7 - currentDay) % 7 || 7);
     }
 
-    const isLibraryRequest = /library|seat|computer/.test(lower);
+    const isComputerLab = /computer lab|tech lab/.test(lower);
+    const isLibraryRequest = /library|seat|computer/.test(lower) && !isComputerLab;
     const wantsDiscussion = /discussion|meeting room|group room/.test(lower);
     const requestedFacilities: string[] = [];
     if (/whiteboard|white board/.test(lower)) requestedFacilities.push("Whiteboard");
     if (/projector|presentation/.test(lower)) requestedFacilities.push("Projector");
     if (/power|charging|outlet|plug/.test(lower)) requestedFacilities.push("Power outlets");
     if (/video call|video conference|zoom/.test(lower)) requestedFacilities.push("Video conferencing");
-    if (/quiet|silence|study/.test(lower) && !isLibraryRequest) requestedFacilities.push("Quiet study");
+    if (/quiet|silence/.test(lower) && !isLibraryRequest) requestedFacilities.push("Quiet study");
 
     const candidates = rooms.filter((room) => {
       if (isLibraryRequest && !room.libraryArea && !(wantsDiscussion && room.category === "Library · Discussion room")) return false;
@@ -1255,6 +1493,13 @@ function SpaceLensChatbot({
       if (!requestedFacilities.every((facility) => room.facilities.includes(facility))) return false;
       if (roomHasConflict(room, requestedDate, requestedTime, requestedDuration)) return false;
       return true;
+    }).sort((a, b) => {
+      const rank = (room: Room) => {
+        const available = room.libraryArea === "study" ? 60 - libraryOccupied.study : room.libraryArea === "computer" ? 24 - libraryOccupied.computer : room.capacity;
+        const facilityFit = requestedFacilities.filter((facility) => room.facilities.includes(facility)).length * 20;
+        return facilityFit - Math.abs(available - requestedPeople) - room.distanceM / 20;
+      };
+      return rank(b) - rank(a);
     }).slice(0, 4);
 
     let response: string;
