@@ -1161,7 +1161,191 @@ function App() {
           </section>
         </div>
       )}
+      <SpaceLensChatbot
+        rooms={rooms}
+        date={date}
+        startTime={startTime}
+        duration={duration}
+        libraryOccupied={libraryOccupied}
+        onSelectRoom={setSelectedRoom}
+      />
     </main>
+  );
+}
+
+type ChatMessage = {
+  role: "assistant" | "user";
+  text: string;
+  matches?: Room[];
+};
+
+function SpaceLensChatbot({
+  rooms,
+  date,
+  startTime,
+  duration,
+  libraryOccupied,
+  onSelectRoom,
+}: {
+  rooms: Room[];
+  date: string;
+  startTime: string;
+  duration: number;
+  libraryOccupied: { study: number; computer: number };
+  onSelectRoom: (room: Room) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [messages, setMessages] = useState<ChatMessage[]>([
+    {
+      role: "assistant",
+      text: "Tell me what kind of place you need. I can search rooms or check the simulated library seat count.",
+    },
+  ]);
+
+  function replyToRequest(rawRequest: string) {
+    const request = rawRequest.trim();
+    if (!request) return;
+
+    const lower = request.toLowerCase();
+    const peopleMatch = lower.match(/\b(?:for|with)\s+(\d{1,3})\b|\b(\d{1,3})\s*(?:people|person|students|pax|of us)\b/);
+    const requestedPeople = peopleMatch ? Number(peopleMatch[1] || peopleMatch[2]) : 1;
+    const durationMatch = lower.match(/\b(\d+)\s*(hours?|hrs?|minutes?|mins?)\b/);
+    const requestedDuration = durationMatch
+      ? Math.max(30, Math.min(360, Math.round((Number(durationMatch[1]) * (/^(?:hour|hr)/.test(durationMatch[2]) ? 60 : 1)) / 30) * 30))
+      : duration;
+    const timeMatch = lower.match(/\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/);
+    let requestedTime = lower.includes("midnight") ? "00:00" : lower.includes("noon") ? "12:00" : startTime;
+    if (timeMatch) {
+      let hour = Number(timeMatch[1]) % 12;
+      if (timeMatch[3] === "pm") hour += 12;
+      requestedTime = `${String(hour).padStart(2, "0")}:${timeMatch[2] || "00"}`;
+    }
+
+    let requestedDate = date;
+    if (lower.includes("tomorrow")) requestedDate = addDays(date, 1);
+    else if (lower.includes("saturday")) {
+      const currentDay = new Date(`${date}T12:00:00`).getDay();
+      requestedDate = addDays(date, (6 - currentDay + 7) % 7 || 7);
+    } else if (lower.includes("sunday")) {
+      const currentDay = new Date(`${date}T12:00:00`).getDay();
+      requestedDate = addDays(date, (7 - currentDay) % 7 || 7);
+    }
+
+    const isLibraryRequest = /library|seat|computer/.test(lower);
+    const wantsDiscussion = /discussion|meeting room|group room/.test(lower);
+    const requestedFacilities: string[] = [];
+    if (/whiteboard|white board/.test(lower)) requestedFacilities.push("Whiteboard");
+    if (/projector|presentation/.test(lower)) requestedFacilities.push("Projector");
+    if (/power|charging|outlet|plug/.test(lower)) requestedFacilities.push("Power outlets");
+    if (/video call|video conference|zoom/.test(lower)) requestedFacilities.push("Video conferencing");
+    if (/quiet|silence|study/.test(lower) && !isLibraryRequest) requestedFacilities.push("Quiet study");
+
+    const candidates = rooms.filter((room) => {
+      if (isLibraryRequest && !room.libraryArea && !(wantsDiscussion && room.category === "Library · Discussion room")) return false;
+      if (wantsDiscussion && room.category !== "Library · Discussion room") return false;
+      if (!isLibraryRequest && !wantsDiscussion && /auditorium/.test(lower) && !room.category.toLowerCase().includes("auditorium")) return false;
+      if (!isLibraryRequest && !wantsDiscussion && /lab|computer/.test(lower) && !room.category.toLowerCase().includes("lab")) return false;
+      const available = room.libraryArea === "study"
+        ? 60 - libraryOccupied.study
+        : room.libraryArea === "computer"
+          ? 24 - libraryOccupied.computer
+          : room.capacity;
+      if (available < requestedPeople) return false;
+      if (!requestedFacilities.every((facility) => room.facilities.includes(facility))) return false;
+      if (roomHasConflict(room, requestedDate, requestedTime, requestedDuration)) return false;
+      return true;
+    }).slice(0, 4);
+
+    let response: string;
+    if (candidates.length > 0) {
+      response = isLibraryRequest
+        ? `I found ${candidates.length} library option${candidates.length === 1 ? "" : "s"} for ${requestedPeople} ${requestedPeople === 1 ? "person" : "people"}. Seat counts are simulated and change during this demo.`
+        : `These spaces fit your request for ${requestedPeople} ${requestedPeople === 1 ? "person" : "people"} on ${longDate(requestedDate)} at ${requestedTime}.`;
+    } else if (isLibraryRequest) {
+      response = "I couldn’t find a library area with enough simulated free seats for that request. Try a smaller group or check again shortly.";
+    } else {
+      response = `I couldn’t find a matching space at ${requestedTime} on ${longDate(requestedDate)}. Try another time or fewer requirements.`;
+    }
+
+    setMessages((current) => [
+      ...current,
+      { role: "user", text: request },
+      { role: "assistant", text: response, matches: candidates },
+    ]);
+    setDraft("");
+  }
+
+  return (
+    <div className="space-chat">
+      {open && (
+        <section className="space-chat-panel" aria-label="SpaceLens chat assistant">
+          <header className="space-chat-header">
+            <div>
+              <strong>Ask SpaceLens</strong>
+              <span>Room finder · demo assistant</span>
+            </div>
+            <button type="button" aria-label="Close chat" onClick={() => setOpen(false)}>×</button>
+          </header>
+          <div className="space-chat-messages" aria-live="polite">
+            {messages.map((message, index) => (
+              <div className={`space-chat-message ${message.role}`} key={index}>
+                <p>{message.text}</p>
+                {message.matches?.map((room) => {
+                  const seats = room.libraryArea === "study"
+                    ? 60 - libraryOccupied.study
+                    : room.libraryArea === "computer"
+                      ? 24 - libraryOccupied.computer
+                      : null;
+                  return (
+                    <article className="space-chat-result" key={room.name}>
+                      <div>
+                        <strong>{room.name}</strong>
+                        <small>
+                          {room.category} · up to {room.capacity} people
+                          {seats !== null ? ` · ${seats} seats free (simulated)` : ""}
+                        </small>
+                        <small>{room.facilities.slice(0, 3).join(" · ")}</small>
+                      </div>
+                      <button type="button" onClick={() => onSelectRoom(room)}>View</button>
+                    </article>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+          <div className="space-chat-prompts">
+            <button type="button" onClick={() => replyToRequest("Find a quiet library seat with a computer")}>Library seat</button>
+            <button type="button" onClick={() => replyToRequest("Discussion room for 4 people at 2 pm")}>Discussion room</button>
+          </div>
+          <form
+            className="space-chat-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              replyToRequest(draft);
+            }}
+          >
+            <input
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              placeholder="Describe the space you need…"
+              aria-label="Describe the space you need"
+            />
+            <button type="submit" aria-label="Send message">↑</button>
+          </form>
+          <p className="space-chat-disclaimer">Demo data only · library occupancy is simulated</p>
+        </section>
+      )}
+      <button
+        type="button"
+        className="space-chat-launcher"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <span aria-hidden="true">{open ? "×" : "✦"}</span>
+        {open ? "Close" : "Ask SpaceLens"}
+      </button>
+    </div>
   );
 }
 
